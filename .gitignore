@@ -1,3 +1,6 @@
 *.mp4
 render_work/
 __pycache__/
+.env
+.env.*
+*.key

@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+"""build_v2_shotlist.py — Generates the curated 21-shot cinematic trailer shotlist (V2).
+
+Title: "Silicon Heartbeat — The Neon Odyssey"
+Cadence: 21 sweeping shots (8s to 12s), totaling exactly 180.000s.
+Movement: Continuous forward chase cams, low road trackers, and side-scroller parallax video game tracking.
+Strict Character Consistency:
+  - Chloe: Stunning Caucasian woman, sleek straight jet-black hair, striking blue eyes, form-fitting white bodysuit.
+  - Rabbit: Small white rabbit, round nerd glasses, gold compass glowing bright blue around neck.
+  - Vehicle: Sleek white aerodynamic cyber-interceptor with cyan neon underglow and plasma thrusters.
+"""
+
+import json
+from pathlib import Path
+
+SONG_DIR = Path(r"X:\chloeos-maestro\songs\silicon_heartbeat")
+
+SHOTS = [
+    {
+        "shot": 1,
+        "t_start": 0.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "intro",
+        "transition": 1.2,
+        "camera": "Forward Push Dolly",
+        "scene": "Hangar Boot & Awakening",
+        "prompt": (
+            "Cinematic forward push-in dolly shot through a vast, moody high-tech subterranean hangar. "
+            "Overhead industrial fluorescent lights flicker to life one by one, illuminating a sleek aerodynamic white cyber-interceptor vehicle. "
+            "Cyan LED headlights snap on, casting long beams through swirling atmospheric haze. Reflections on polished concrete, cinematic 35mm, photorealistic, 8k."
+        )
+    },
+    {
+        "shot": 2,
+        "t_start": 8.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "intro",
+        "transition": 0.8,
+        "camera": "Side Profile Medium Shot",
+        "scene": "Cockpit Prep & Compass Lock",
+        "prompt": (
+            "Cinematic side profile tracking shot inside the futuristic vehicle cockpit. "
+            "A stunning beautiful Caucasian woman with sleek straight jet-black hair, striking blue eyes, and a form-fitting white bodysuit grips the illuminated steering yoke. "
+            "Beside her in the co-pilot console, a cute small white rabbit wearing round nerd glasses holds a gold compass glowing bright blue around its neck. "
+            "The compass needle spins rapidly and locks forward, projecting a cyan holographic route into the air. Volumetric neon dashboard lighting, photorealistic."
+        )
+    },
+    {
+        "shot": 3,
+        "t_start": 16.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Low Rear Chase Camera",
+        "scene": "Skyway Launch",
+        "prompt": (
+            "Dynamic low-angle rear chase camera closely tracking a sleek white cyber-interceptor as it rockets out of massive hangar gates onto an elevated cyberpunk skyway. "
+            "Cyan plasma thrusters ignite with explosive light trails. Rain-slicked wet asphalt reflects towering magenta and teal neon skyscrapers. Continuous high-speed forward rush, epic scale."
+        )
+    },
+    {
+        "shot": 4,
+        "t_start": 24.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "High-Speed Side-Scroller",
+        "scene": "Neon Metropolis Sprint",
+        "prompt": (
+            "High-speed side-scroller video game tracking shot moving rapidly from left to right. "
+            "A sleek aerodynamic white cyber-interceptor vehicle races across the screen with cyan tire smoke, driven by a woman with jet-black hair in a white bodysuit. "
+            "Massive multi-layered parallax scrolling: passing holographic Japanese kanji billboards, glass sky-bridges, and towering neon cityscapes scrolling smoothly in the background. Rain streaks horizontally, 8k."
+        )
+    },
+    {
+        "shot": 5,
+        "t_start": 32.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Low Forward Hood Camera",
+        "scene": "Illuminated Glass Tunnel",
+        "prompt": (
+            "Low-angle forward hood-cam rushing through an enormous translucent glass-and-steel highway tunnel at blinding speed. "
+            "Concentric rings of bright amber and cyan neon strobe overhead in rhythmic succession, casting pulsing reflections across the hood of the white interceptor. Velocity blur, clean futuristic architecture."
+        )
+    },
+    {
+        "shot": 6,
+        "t_start": 40.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Grand Wide Side-Tracker",
+        "scene": "Suspension Bridge Crossing",
+        "prompt": (
+            "Sweeping wide cinematic side-scroller tracking shot moving left to right. "
+            "The white cyber vehicle races across a colossal suspension bridge made of pulsing fiber-optic cables, soaring high above a sea of rolling nocturnal clouds. "
+            "Below the clouds, a vast circuit-grid metropolis glows with millions of teal and violet lights. Anamorphic lens, epic cinematic grandeur."
+        )
+    },
+    {
+        "shot": 7,
+        "t_start": 48.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "build",
+        "transition": 0.5,
+        "camera": "Low Ground Forward Tracker",
+        "scene": "Data Surge Build-Up",
+        "prompt": (
+            "Extreme low-angle forward tracking camera skimming inches above the asphalt at accelerating speed. "
+            "Glowing digital binary code and luminescent cyan circuit traces surge and stream beneath the chassis of the white vehicle. "
+            "Road surface illuminates with pulsing light grids, camera vibrating with raw acceleration and kinetic power."
+        )
+    },
+    {
+        "shot": 8,
+        "t_start": 56.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "build",
+        "transition": 0.4,
+        "camera": "Side-Angle Tracking Action",
+        "scene": "Thruster Overdrive & Navigation Beacon",
+        "prompt": (
+            "Dynamic three-quarter side tracking shot alongside the white cyber-interceptor as it shifts into hyperdrive. "
+            "Twin rear plasma thrusters flare with blinding cyan fire. Inside the cockpit, a cute small white rabbit with round nerd glasses points forward as its gold compass projects a dazzling blue holographic grid into the sky. Wind whipping, sparks of light."
+        )
+    },
+    {
+        "shot": 9,
+        "t_start": 64.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "drop",
+        "transition": 0.4,
+        "camera": "Epic Forward Chase Tracker",
+        "scene": "First Drop Peak — Digital Chasm Flight",
+        "prompt": (
+            "FIRST DROP PEAK: Monumental wide forward chase shot as the white cyber-interceptor bursts over a highway precipice into a colossal digital chasm at Mach speed. "
+            "Shockwaves of cyan and violet energy ripple outward. Floating geometric monoliths and crystalline towers zoom past in hypersonic flight. Colossal scale, explosive cinematic energy."
+        )
+    },
+    {
+        "shot": 10,
+        "t_start": 72.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "drop",
+        "transition": 0.6,
+        "camera": "Dynamic Side-Scroller Action",
+        "scene": "Crystalline Spire Slalom",
+        "prompt": (
+            "High-octane side-scroller arcade action shot tracking left-to-right at extreme velocity. "
+            "The white aerodynamic vehicle banks sharply and slaloms between floating translucent crystalline spires. "
+            "Beams of iridescent laser light crisscross the background. Glowing cyan tire particles drift in a dramatic spiral slipstream, high-speed camera tracking."
+        )
+    },
+    {
+        "shot": 11,
+        "t_start": 80.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Forward Steady Dolly",
+        "scene": "Subterranean Server Canyon",
+        "prompt": (
+            "Smooth forward tracking dolly shot gliding deep into a subterranean supercomputer canyon. "
+            "Endless vertical walls of towering quantum server racks glow with rhythmic blue indicator lights, perfectly reflected in a still sheet of dark underground water beneath the elevated road. Peaceful, awe-inspiring technological monoliths."
+        )
+    },
+    {
+        "shot": 12,
+        "t_start": 88.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Side-Scroller Cruise",
+        "scene": "Subterranean Magnetic Rail",
+        "prompt": (
+            "Side-scrolling tracking shot moving smoothly left-to-right at cruising speed. "
+            "A sleek white vehicle glides parallel to a high-speed magnetic levitation train glowing with orange light. "
+            "Through the vehicle window, a small white rabbit with nerd glasses watches the gold compass pulse in exact sync with the rhythmic blue architecture passing by. Parallax motion."
+        )
+    },
+    {
+        "shot": 13,
+        "t_start": 96.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Over-The-Shoulder Cockpit View",
+        "scene": "Gateway Approach",
+        "prompt": (
+            "Cinematic over-the-shoulder cockpit camera looking forward through the windshield. "
+            "A stunning beautiful woman with sleek straight jet-black hair and a white bodysuit steers with calm focus. "
+            "Ahead on the horizon, an enormous ancient holographic gateway made of glowing golden mathematical runes looms into view, radiating warm ethereal light across the dashboard."
+        )
+    },
+    {
+        "shot": 14,
+        "t_start": 104.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "verse",
+        "transition": 0.8,
+        "camera": "Atmospheric Side-Scroller",
+        "scene": "Fiber-Optic Forest",
+        "prompt": (
+            "Enchanting side-scroller tracking shot moving left to right through a bioluminescent cybernetic forest. "
+            "Trees made of glowing fiber-optic weeping willows cascade downward in curtains of cyan and lavender light. "
+            "The white cyber-interceptor glides silently through drifting embers of digital snow. Dreamlike, poetic sci-fi atmosphere, depth of field."
+        )
+    },
+    {
+        "shot": 15,
+        "t_start": 112.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "build",
+        "transition": 0.4,
+        "camera": "Forward Wormhole Chase",
+        "scene": "Vortex Acceleration",
+        "prompt": (
+            "Second build-up: High-velocity forward chase camera hurtling directly into a spinning wormhole corridor. "
+            "Concentric rings of neon geometric wireframes collapse inward as the white vehicle accelerates violently. Light streaking and chromatic aberration pulling the scene into intense tunnel vision."
+        )
+    },
+    {
+        "shot": 16,
+        "t_start": 120.0,
+        "duration": 8.0,
+        "seconds": 8.0,
+        "role": "build",
+        "transition": 0.4,
+        "camera": "Tight Side-Angle Tracker",
+        "scene": "Compass Beacon Breach",
+        "prompt": (
+            "Tight three-quarter side tracking shot: intense wind turbulence buffeting the sleek white chassis. "
+            "Inside, the white rabbit with nerd glasses holds up the gold compass as it fires a brilliant, blinding blue laser beam forward, piercing through the swirling dimensional rift. Maximum speed, dramatic tension."
+        )
+    },
+    {
+        "shot": 17,
+        "t_start": 128.0,
+        "duration": 10.0,
+        "seconds": 10.0,
+        "role": "drop",
+        "transition": 0.5,
+        "camera": "Epic Wide Forward Flight",
+        "scene": "Second Drop / Celestial Matrix Flight",
+        "prompt": (
+            "SECOND MASTER DROP: The vehicle shatters through the portal into vast open cosmic space. "
+            "Epic wide forward chase shot following the sleek white cyber-interceptor as it glides over an infinite crystalline causeway suspended above a glowing celestial nebula. "
+            "Billions of stars, auroras of magenta and electric blue rolling across deep space. Triumphant, majestic cinematic masterwork."
+        )
+    },
+    {
+        "shot": 18,
+        "t_start": 138.0,
+        "duration": 10.0,
+        "seconds": 10.0,
+        "role": "climax",
+        "transition": 0.6,
+        "camera": "Cosmic Side-Scroller",
+        "scene": "Celestial River Race",
+        "prompt": (
+            "Grand side-scroller tracking shot moving rapidly left to right across the cosmos. "
+            "The white aerodynamic vehicle races parallel to a flowing river of liquid starlight and floating holographic rings. "
+            "In the cockpit, a beautiful woman with sleek jet-black hair and blue eyes smiles toward the vast universe, accompanied by the white rabbit with nerd glasses. Parallax galaxy scrolling in the background."
+        )
+    },
+    {
+        "shot": 19,
+        "t_start": 148.0,
+        "duration": 10.0,
+        "seconds": 10.0,
+        "role": "climax",
+        "transition": 0.8,
+        "camera": "Ascending Rear Chase",
+        "scene": "Climb to the Event Horizon",
+        "prompt": (
+            "Low-angle rear tracking camera following the white interceptor as it tilts upward, ascending toward an immense radiant digital sunrise breaking over the edge of the matrix. "
+            "Thrusters burning pure diamond-white fire. Shockwaves of golden light washing over the vehicle."
+        )
+    },
+    {
+        "shot": 20,
+        "t_start": 158.0,
+        "duration": 12.0,
+        "seconds": 12.0,
+        "role": "outro",
+        "transition": 1.0,
+        "camera": "Majestic Slow Side-Tracker",
+        "scene": "Holographic Ocean Sunrise",
+        "prompt": (
+            "Majestic, serene side-scroller tracking shot moving smoothly left to right at peaceful cruising speed. "
+            "The white vehicle glides along an endless glass-smooth holographic ocean reflecting a breathtaking sunrise of soft gold, rose, and cyan. "
+            "Gentle ripples of light, warm morning glow reflecting on the sleek white hull, calm cinematic beauty."
+        )
+    },
+    {
+        "shot": 21,
+        "t_start": 170.0,
+        "duration": 10.0,
+        "seconds": 10.0,
+        "role": "outro",
+        "transition": 1.5,
+        "camera": "Centered Rear Vanishing Shot",
+        "scene": "Journey Into the Light",
+        "prompt": (
+            "Wide centered rear view looking directly down an infinite luminous causeway toward the rising sun on the horizon. "
+            "The sleek white cyber-interceptor cruises steadily away from the camera, shrinking into the distance as golden light floods the frame. "
+            "Slow dissolve into pure warm radiant white light, timeless and poetic finale."
+        )
+    }
+]
+
+def build_v2():
+    SONG_DIR.mkdir(parents=True, exist_ok=True)
+    clips_dir = SONG_DIR / "clips_v2"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    blueprint = {
+        "title": "Silicon Heartbeat — The Neon Odyssey (Trailer V2)",
+        "duration": 180.0,
+        "bpm": 120.0,
+        "total_shots": len(SHOTS),
+        "clips_dir": "clips_v2",
+        "narrative_arc": "High-speed cyber-interceptor odyssey across dystopian neon highways, underground data canyons, and celestial space into digital dawn.",
+        "shots": SHOTS
+    }
+
+    shotlist = {
+        "song": "silicon_heartbeat",
+        "version": "v2_trailer",
+        "duration": 180.0,
+        "total_shots": len(SHOTS),
+        "clips_dir": "clips_v2",
+        "shots": []
+    }
+
+    for s in SHOTS:
+        item = dict(s)
+        item["clip_path"] = str(clips_dir / f"shot_{s['shot']:03d}.mp4")
+        shotlist["shots"].append(item)
+
+    bp_path = SONG_DIR / "blueprint_v2.json"
+    sl_path = SONG_DIR / "shotlist_v2.json"
+
+    bp_path.write_text(json.dumps(blueprint, indent=2), encoding="utf-8")
+    sl_path.write_text(json.dumps(shotlist, indent=2), encoding="utf-8")
+
+    print(f"[OK] Generated {bp_path.name} with {len(SHOTS)} shots.")
+    print(f"[OK] Generated {sl_path.name} with {len(SHOTS)} shots.")
+    print(f"[OK] Output directory set to: {clips_dir}")
+
+if __name__ == "__main__":
+    build_v2()

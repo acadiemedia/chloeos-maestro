@@ -1,143 +1,124 @@
 #!/usr/bin/env python3
-"""ChloeOS Maestro — the lyrics→beat-locked-film engine for the ChloeOS 30-track
-library.
+"""ChloeOS Maestro — The Master Music & Lyric Cinema Engine.
 
-Pipeline (per track):
-    <track>.music.json   (analyzer: real beats, 4/4 grid, sections, energy)
-    └─ maestro.shotlist  →  beat-locked xfade chain (every edit lands on a
-                            musical edit time; transitions cast by section role:
-                            drop→fade, build→fadeblack, low→dissolve,
-                            intro→fade, outro→fade-to-white hold)
-    └─ render_final      →  <TRACK>_ChloeOS_Final.mp4  exactly DUR = 180.000s
-                            (video 4320 frames @24 + audio muxed, beat-perfect)
-
-Song 1 ("awaken") is the pilot and the current proof on disk:
-    artifacts/CHLOEOS_awaken_180.000.mp4  ← ffprobe: 180.000000s / 4320f / AAC
-
-Maestro reads a manifest (one JSON line per track), iterates ALL of them, and
-writes one beat-locked film per track — the orchestra, not a single song.
+Orchestrates the complete 5-stage pipeline for any song in the library:
+1. Music & Rhythmic Vector Analysis (Librosa, AudioFlux)
+2. Variable-Duration Montage Blueprint Generation
+3. LLM Lyric Direction & Visual Prompt Crafting (with Chloe & Rabbit consistency)
+4. Targeted AI Video Generation (Agnes Video V2.0 API)
+5. Drift-Free Beat-Locked Film Compilation (FFmpeg xfade chain, 180.000s @ 24fps)
 
 Usage:
-    python3 maestro.py [manifest.json] [--force]
-    default manifest: ./manifest.json
+    python maestro.py --track songs/silicon_heartbeat [--render-only] [--generate-clips] [--max-clips 3]
+    python maestro.py --all
 """
-import json
+
+import argparse
 import subprocess
 import sys
 from pathlib import Path
 
-DUR = 180.0
-FPS = 24
-W, H = 1280, 704
-FADE_IN = 1.5
-TRANSITIONS = {"drop": "fade", "build": "fadeblack", "low": "dissolve",
-               "intro": "fade", "outro": "fadewhite"}
+PYTHON = sys.executable
 
+def run_pipeline(song_dir: Path, generate_anchors: bool = False, max_anchors: int = 0,
+                 generate_clips: bool = False, max_clips: int = 0, render_only: bool = False):
+    song_dir = Path(song_dir).resolve()
+    print(f"\n=======================================================")
+    print(f"   CHLOEOS MAESTRO: {song_dir.name.upper()}")
+    print(f"=======================================================\n")
 
-def shotlist_from_grid(music_json: dict) -> list:
-    """Pure function: music grid (beats+sections) -> the 90-shot beat-locked
-    shotlist used by the renderer. Independent of any project state."""
-    shots = []
-    edits = [b for b in music_json.get("beats", [])
-             if float(b["t"]) >= 2.5]
-    grid = music_json.get("grid", {})
-    downbeats = set(music_json.get("downbeats", []))
-    n = len(edits)
-    for i, b in enumerate(edits):
-        role = "low"
-        t = float(b["t"])
-        if i < 3:
-            role = "intro"
-        elif i >= n - 2:
-            role = "outro"
-        else:
-            z = grid.get("zones", [])
-            for zone in z:
-                if zone["start"] <= t < zone["end"]:
-                    role = zone.get("role", "low")
-                    break
-        shots.append({
-            "shot": i + 1,
-            "t": round(t, 4),
-            "role": role,
-            "transition": 1.5 if role in ("intro", "outro") else
-                          (0.9 if role == "low" else 0.35),
-            "src": "",
-            "in": 0.0,
-            "out": 0.125,
-        })
-    return shots
+    audio_file = next(song_dir.glob("*.wav"), None) or next(song_dir.glob("*.webm"), None)
+    if not audio_file:
+        sys.exit(f"Error: No audio file found in {song_dir}")
 
+    scripts_dir = Path(__file__).parent
 
-def render_track(track: dict, base: Path, force: bool = False):
-    track_name = track["track"]
-    music = Path(track["music_json"])
-    if not music.exists():
-        return ("SKIP", "%s missing music grid" % track_name, None)
-    grid = json.load(open(music))
+    # Stage 1: Music Analysis
+    music_json = song_dir / f"{song_dir.name}.music.json"
+    if not music_json.exists():
+        print(f"[Stage 1/6] Analyzing acoustic vectors & beat grid...")
+        subprocess.run([PYTHON, str(scripts_dir / "music_analyzer.py"),
+                        str(audio_file), str(music_json), song_dir.name], check=True)
+    else:
+        print(f"[Stage 1/6] Music grid already analyzed: {music_json.name}")
 
-    out = base / ("%s_ChloeOS_Final.mp4" % track["label"])
-    if out.exists() and not force and out.stat().st_size > 100_000:
-        try:
-            r = subprocess.run(
-                ["ffprobe", "-v", "error", "-show_entries",
-                 "format=duration", "-of", "csv=nk=1:p=0", str(out)],
-                capture_output=True)
-            if abs(float(r.stdout.strip()) - DUR) < 1e-3:
-                return ("OK", "already verified %.3fs" % DUR, out)
-        except Exception:
-            pass
+    # Stage 2: Montage Blueprint
+    blueprint_json = song_dir / "blueprint.json"
+    if not blueprint_json.exists():
+        print(f"[Stage 2/6] Generating variable-duration montage blueprint...")
+        subprocess.run([PYTHON, str(scripts_dir / "montage_orchestrator.py"), str(song_dir)], check=True)
+    else:
+        print(f"[Stage 2/6] Montage blueprint already present.")
 
-    # build shotlist from the grid via the engine, hand to renderer
-    shotlist = shotlist_from_grid(grid)
-    sl_file = base / ("%s.shotlist.json" % track_name)
-    json.dump({"shots": shotlist}, open(sl_file, "w"), indent=1)
+    # Stage 3: Lyric Direction
+    shotlist_json = song_dir / "shotlist.json"
+    if not shotlist_json.exists():
+        print(f"[Stage 3/6] Directing lyrics & generating character-anchored prompts...")
+        subprocess.run([PYTHON, str(scripts_dir / "lyric_director.py"), str(song_dir)], check=True)
+    else:
+        print(f"[Stage 3/6] Shotlist with visual prompts already present.")
 
-    work = base / "render_work"
-    work.mkdir(exist_ok=True)
-    rnd = work / ("%s_seg.mp4" % track_name)
-    seg_list = work / ("%s.lst" % track_name)
-    with open(seg_list, "w") as f:
-        for i, s in enumerate(shotlist):
-            segfile = work / ("%s_seg_%03d.mp4" % (track_name, i + 1))
-            f.write("file '%s'\n" % segfile)
+    # Stage 4: Visual Anchor Generation via Google Imagen 3 (Optional / On-Demand)
+    if generate_anchors:
+        print(f"[Stage 4/6] Generating photorealistic visual anchors via Google Imagen 3...")
+        cmd = [PYTHON, str(scripts_dir / "google_image_generator.py"), "--shotlist", str(shotlist_json)]
+        if max_anchors > 0:
+            cmd += ["--max", str(max_anchors)]
+        subprocess.run(cmd, check=True)
+    else:
+        print(f"[Stage 4/6] Anchor generation skipped (use --generate-anchors to create Imagen 3 stills).")
 
-    vf_chain = ";".join(
-        "[%d:v]trim=start=0:end=0.125,setpts=PTS-STARTPTS,fps=%d[v%d]"
-        % (i, FPS, i) for i in range(len(shotlist)))
-    fc = "color=black:s=%dx%d:r=%d:d=%.3f[c0];" % (W, H, FPS, FADE_IN)
-    fc += "[c0][0:v]xfade=transition=fade:duration=%.3f:offset=0[v0];" % FADE_IN
-    fc += vf_chain
-    # NOTE: real beat-locked cumulative chain is generated by render_final;
-    # this mirror just proves the manifest loop + ffprobe gate per track.
-    chain = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(out),
-         "-vf", "scale=1280:704:force_original_aspect_ratio=decrease,"
-                "pad=1280:704:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24",
-         "-an", "-t", "180", "-c:v", "libx264", "-preset", "veryfast",
-         "-crf", "18", "-pix_fmt", "yuv420p", str(rnd)],
-        capture_output=True) if out.exists() else None
-    return ("WORK", "renderer hook in place", out)
+    # Stage 5: Video Clip Generation (Optional / On-Demand)
+    if generate_clips:
+        print(f"[Stage 5/6] Generating AI clips via Agnes Video V2.0...")
+        cmd = [PYTHON, str(scripts_dir / "agnes_video_batch_client.py"), "--shotlist", str(shotlist_json)]
+        if max_clips > 0:
+            cmd += ["--max", str(max_clips)]
+        subprocess.run(cmd, check=True)
+    else:
+        print(f"[Stage 5/6] Video generation skipped (use --generate-clips to run video API).")
 
+    # Stage 6: Final Render
+    print(f"[Stage 6/6] Compiling beat-locked master film (180.000s @ 24fps)...")
+    subprocess.run([PYTHON, str(scripts_dir / "render_final.py"), str(song_dir)], check=True)
+
+    print(f"\n[OK] MAESTRO PIPELINE COMPLETE FOR {song_dir.name.upper()}!")
 
 def main():
-    manifest_f = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("manifest.json")
-    if not manifest_f.exists():
-        raise SystemExit("[maestro] NO MANIFEST %s — create one JSON line "
-                         "per track {track,label,music_json}" % manifest_f)
-    base = manifest_f.parent
-    results = []
-    for line in manifest_f.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        track = json.loads(line)
-        status, why, out = render_track(track, base,
-                                        "--force" in sys.argv)
-        results.append((track.get("label", track["track"]), status, why, out))
-    for label, status, why, out in results:
-        print("[maestro] %-20s %-5s %s" % (label, status, why))
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--track", default=r"X:\chloeos-maestro\songs\silicon_heartbeat",
+                    help="Path to song directory")
+    ap.add_argument("--generate-anchors", action="store_true",
+                    help="Invoke Google Imagen 3 to generate visual anchor plates")
+    ap.add_argument("--max-anchors", type=int, default=0,
+                    help="Max anchor plates to generate (0 = all)")
+    ap.add_argument("--generate-clips", action="store_true",
+                    help="Invoke Agnes Video V2.0 API to generate clips")
+    ap.add_argument("--max-clips", type=int, default=0,
+                    help="Max clips to generate in this run (0 = all)")
+    ap.add_argument("--all", action="store_true",
+                    help="Process all songs under songs/ directory")
+    args = ap.parse_args()
 
+    if args.all:
+        songs_dir = Path(r"X:\chloeos-maestro\songs")
+        for s in songs_dir.iterdir():
+            if s.is_dir():
+                run_pipeline(
+                    s,
+                    generate_anchors=args.generate_anchors,
+                    max_anchors=args.max_anchors,
+                    generate_clips=args.generate_clips,
+                    max_clips=args.max_clips,
+                )
+    else:
+        run_pipeline(
+            Path(args.track),
+            generate_anchors=args.generate_anchors,
+            max_anchors=args.max_anchors,
+            generate_clips=args.generate_clips,
+            max_clips=args.max_clips,
+        )
 
 if __name__ == "__main__":
     main()

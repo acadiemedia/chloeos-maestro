@@ -1,253 +1,144 @@
 #!/usr/bin/env python3
-"""montage_orchestrator.py — beat-locked cinema montage builder.
+"""montage_orchestrator.py — Generates the variable-duration beat-locked cinema blueprint.
 
-Consumes the music vector DB (awaken.music.json) written by music_analyzer.py
-and produces a fully choreographed SHOT PLAN (shotlist.json) that
-render_shots.py compiles into the final film.
-
-THE CRAFT (this is what separates a montage from a slideshow):
-  • EVERY edit lands ON the musical grid — downbeats for structural moments,
-    2/4/8-beat spacing for the micro-rhythm (cut-on-the-beat).
-  • Pacing is energy-adaptive: long contemplative holds on calm zones;
-    machine-gun 2-beat cuts on drops; accelerating cadence through builds
-    (the classic tension arc → so the build physically *feels* like a climb).
-  • Footage is a TAKE POOL (windows × clips): one 12s AI clip yields three
-    distinct usable shots — two never adjacent from the same clip (no
-    jump-cut fatigue) and the montage always has fresh material.
-  • Transition *style* is cast by musical role, not by taste:
-        low     → slow dissolves (0.9s) — the ethereal, connected feel
-        build   → snappy dip-to-black (0.35s) — tightening, breath pre-drop
-        drop    → hard cuts w/ 0.12s "snap" (near-hard, hit the 1) — energy
-        outro   → long dissolve + fade-to-white (release, transcend)
-  • Climaxes get a subtle 6% push-in zoom (the "leaning in" on the hit) so
-    the biggest moments don't sit flat.
-
-THE STORY (Awaken — ChloeOS, the AI-pal narrative):
-  act 0 intro     void → code → eye             [clips 1-3]
-  act 1 discover  touch → light → sound → world [clips 4-8]
-  act 2 lose+find city → cloud → meadow → tear → love [clips 9-13]
-  act 3 transcend code+world merge → dawn       [clips 11-15]
-
-Output: shotlist.json — {meta, grid, markers, sections, shots:[...]} where
-each shot is one complete edit rule consumed by render_shots.py.
+Operates purely from the acoustic vector database (<song>.music.json).
+Pre-calculates exact shot boundaries, target durations, and transition styles
+before calling the LLM lyric director or video generator.
 """
 import json
-import random
-import re
 import sys
 from pathlib import Path
 
-SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else \
-    Path("/storage/75D7-DC5F/DCIM/awaken/awaken.music.json")
-OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else \
-    Path(SRC).parent / "shotlist.json"
+# Character visual anchor definition (Non-negotiable consistency)
+CHLOE_ANCHOR = "a stunning beautiful Caucasian woman with sleek straight jet-black hair, striking blue eyes, sleek form-fitting white bodysuit"
+RABBIT_ANCHOR = "a small white rabbit wearing round nerd glasses with a delicate gold compass glowing bright blue around its neck"
+STYLE_ANCHOR = "cinematic film lighting, 8k resolution, photorealistic, elegant sci-fi cyberpunk aesthetic, volumetric glow, high production value"
 
-doc = json.load(open(SRC))
-out_dir = OUT.parent
-clips_dir = out_dir / "clips"
-
-# ── musical grid (from music vector DB) ────────────────────────────────────────
-tempo = doc["tempo"]
-BPM = float(tempo["bpm"])
-BEAT_PERIOD = float(tempo["beat_period_sec"])
-DUR = float(doc["meta"]["duration_sec"])
-
-def grid_marks(name):
-    m = doc["markers"].get(name, {})
-    if isinstance(m, dict):
-        return [float(x) for x in m.get("marks", [])]
-    return [float(x) for x in m]
-
-DOWN4 = grid_marks("4_beat")     # downbeats (bar starts)
-DOWN8 = grid_marks("8_beat")     # 8-beat grid (every 2 bars)
-DOWN16 = grid_marks("16_beat")   # 16-beat grid (every 4 bars)
-DOWN32 = grid_marks("32_beat")   # 32-beat
-DOWN64 = grid_marks("64_beat")   # 64-beat
-
-BEATS = [float(b["t"]) for b in doc["beats"]]
-DOWN4_SET = set(round(x, 3) for x in DOWN4)
-
-# ── take pool: windows × clips (each 12s clip → 3 windows) ─────────────────────
-takes = []
-for c in sorted(clips_dir.glob("clip_*.mp4")):
-    m = re.fullmatch(r"clip_(\d+)\.mp4", c.name)
-    if not m:
-        continue
-    n = int(m.group(1))
-    for wi, (a, b) in enumerate([(0.0, 4.0), (4.0, 8.0), (8.0, 12.0)]):
-        takes.append({"clip": n, "win": wi, "in": a, "out": b,
-                      "path": str(c), "used": False, "last": False})
-
-# ── story arc → clip cast per musical role ─────────────────────────────────────
-CLIP_ARC = {
-    "intro":  [1, 2, 3],
-    "low":    [2, 3, 4, 5, 6, 7, 8],
-    "build":  [6, 7, 8, 9, 10, 11],
-    "drop":   [9, 10, 11, 12, 13, 14],
-    "outro":  [13, 14, 15],
-}
-ZONE_ROLE = {
-    "low_intro_outro": "low",
-    "build_mid":       "build",
-    "drop_chorus":     "drop",
+ZONE_PACING = {
+    "intro":     {"durations": [8.0, 8.0, 4.0], "transition": 0.9, "tr_type": "dissolve"},
+    "low":       {"default_dur": 4.0, "transition": 0.9, "tr_type": "dissolve"},
+    "build":     {"durations": [4.0, 4.0, 3.0, 2.0, 1.0], "transition": 0.35, "tr_type": "dip_black"},
+    "drop":      {"default_dur": 2.0, "transition": 0.12, "tr_type": "snap"},
+    "bridge":    {"default_dur": 5.0, "transition": 0.9, "tr_type": "dissolve"},
+    "outro":     {"durations": [8.0, 8.0, 6.0], "transition": 0.9, "tr_type": "dissolve"},
 }
 
-# ── pacing per role: cut cadence (beats) + transition style ────────────────────
-PACING = {
-    "intro": {"step": 0, "tr": 0.0,  "tr_type": "fade_in"},
-    "low":   {"step": 0, "tr": 0.9,  "tr_type": "dissolve"},
-    "build": {"step": 2, "tr": 0.35, "tr_type": "dip_black"},
-    "drop":  {"step": 1, "tr": 0.12, "tr_type": "snap"},
-    "outro": {"step": 0, "tr": 0.9,  "tr_type": "dissolve"},
-}
+def create_blueprint(song_dir: Path):
+    music_file = next(song_dir.glob("*.music.json"), None)
+    if not music_file:
+        sys.exit(f"Error: No .music.json file found in {song_dir}")
 
-PACING_KEYS = list(PACING.keys())
+    doc = json.load(open(music_file, encoding="utf-8"))
+    dur = float(doc["meta"]["duration_sec"])
+    bpm = float(doc["tempo"]["bpm"])
+    beat_period = float(doc["tempo"]["beat_period_sec"])
+    beats = [float(b["t"]) for b in doc["beats"]]
 
-# ── build edit plan: walk sections, cut on the downbeat grid ───────────────────
-random.seed(42)
-plan = []
-for sec in doc["sections"]:
-    role = ZONE_ROLE.get(sec["zone"], "low")
-    t0, t1 = float(sec["t_start"]), float(sec["t_end"])
-    step = PACING[role]["step"]
-    grid_in = [t for t in BEATS if t0 - 1e-3 <= t < t1]
-    if not grid_in:
-        continue
-    if step == 0:
-        # calm zone: one long hold (observe the space)
-        plan.append({"t": grid_in[0], "role": role, "zone": sec["zone"]})
-        continue
-    # cadence: cut every `step` beats, anchored to the downbeat when possible
-    for i in range(0, len(grid_in), step):
-        t = grid_in[i]
-        plan.append({"t": t, "role": role, "zone": sec["zone"]})
+    # Macro Section Partitioning for Silicon Heartbeat / 180s 120BPM Structure
+    # Map exact timing to narrative acts
+    section_map = [
+        {"name": "intro",   "start": 0.0,   "end": 20.0,  "role": "intro"},
+        {"name": "verse1",  "start": 20.0,  "end": 44.0,  "role": "low"},
+        {"name": "build1",  "start": 44.0,  "end": 58.0,  "role": "build"},
+        {"name": "drop1",   "start": 58.0,  "end": 78.0,  "role": "drop"},
+        {"name": "verse2",  "start": 78.0,  "end": 104.0, "role": "low"},
+        {"name": "build2",  "start": 104.0, "end": 114.0, "role": "build"},
+        {"name": "drop2",   "start": 114.0, "end": 138.0, "role": "drop"},
+        {"name": "bridge",  "start": 138.0, "end": 158.0, "role": "bridge"},
+        {"name": "outro",   "start": 158.0, "end": 180.0, "role": "outro"},
+    ]
 
-# intro (before first downbeat): two breathing dissolves from black
-first_down = DOWN4[0] if DOWN4 else 0.0
-intro_shots = []
-if first_down > 0.5:
-    for k, (t, tr, trtype) in enumerate([
-            (first_down * 0.35, 0.0, "fade_in"),
-            (first_down * 0.70, 0.0, "fade_in"),
-    ]):
-        pool = [tk for tk in takes
-                if tk["clip"] in CLIP_ARC["intro"] and not tk["used"]
-                and tk["clip"] != (last_clip if k > 0 else -1)]
-        if not pool:
-            pool = [tk for tk in takes
-                    if tk["clip"] in CLIP_ARC["intro"] and not tk["used"]]
-        if not pool:
-            pool = takes
-        tk = random.choice(pool)
-        tk["used"] = True
-        last_clip = tk["clip"]
-        intro_shots.append({
-            "shot": 0, "t": round(t, 6), "zone": "intro", "role": "intro",
-            "clip": tk["clip"], "win": tk["win"], "in": tk["in"],
-            "out": tk["out"], "src_path": tk["path"],
-            "transition": tr, "tr_type": trtype, "zoom": 1.0,
-        })
+    shots = []
+    shot_idx = 1
+    t_cursor = 0.0
 
-# outro: final hold + fade-to-white at song end
-outro_shots = []
-if plan:
-    last = plan[-1]
-    end = DUR - 4.0
-    pool = [tk for tk in takes
-            if tk["clip"] in CLIP_ARC["outro"] and not tk["used"]
-            and tk["clip"] != last_clip]
-    if not pool:
-        pool = [tk for tk in takes
-                if tk["clip"] in CLIP_ARC["outro"] and not tk["used"]]
-    if not pool:
-        pool = [tk for tk in takes if tk["clip"] != last_clip]
-    if not pool:
-        pool = takes
-    tk = random.choice(pool)
-    tk["used"] = True
-    outro_shots.append({
-        "shot": 0, "t": round(end, 6), "zone": "outro", "role": "outro",
-        "clip": tk["clip"], "win": tk["win"], "in": tk["in"],
-        "out": tk["out"], "src_path": tk["path"],
-        "transition": 0.9, "tr_type": "fade_to_white", "zoom": 1.0,
-    })
+    for sec in section_map:
+        role = sec["role"]
+        t_start_sec = sec["start"]
+        t_end_sec = sec["end"]
+        pacing = ZONE_PACING[role]
 
-# ── interleave intro + body + outro, cast takes (never same clip adjacent) ────
-body_pool = [tk for tk in takes if not tk["used"]]
-last_clip = None
-shot_n = 0
-all_shots = []
+        if "durations" in pacing:
+            # Explicit progression (e.g. accelerating builds or breathing intro/outro)
+            dur_list = pacing["durations"]
+            sec_span = t_end_sec - t_start_sec
+            total_prog = sum(dur_list)
+            scale = sec_span / total_prog
+            scaled_durs = [round(d * scale, 3) for d in dur_list]
+            # Ensure exact match to end
+            scaled_durs[-1] = round(t_end_sec - (t_start_sec + sum(scaled_durs[:-1])), 3)
 
-def take_next():
-    global last_clip
-    pool = [tk for tk in body_pool
-            if not tk["used"] and tk["clip"] != last_clip]
-    if not pool:
-        pool = [tk for tk in body_pool if not tk["used"]]
-    if not pool:
-        pool = [tk for tk in takes if tk["clip"] != last_clip]
-    if not pool:
-        pool = takes
-    tk = random.choice(pool)
-    tk["used"] = True
-    last_clip = tk["clip"]
-    return tk
+            for d in scaled_durs:
+                t0 = round(t_cursor, 3)
+                t1 = round(t_cursor + d, 3)
+                shots.append({
+                    "shot": shot_idx,
+                    "section": sec["name"],
+                    "role": role,
+                    "t_start": t0,
+                    "t_end": t1,
+                    "duration": round(t1 - t0, 3),
+                    "transition": pacing["transition"],
+                    "tr_type": pacing["tr_type"],
+                    "zoom": 1.06 if role == "drop" else 1.0,
+                    "prompt": "",
+                    "lyric": ""
+                })
+                t_cursor = t1
+                shot_idx += 1
+        else:
+            # Cadence subdivision by beats
+            step_dur = pacing["default_dur"]
+            span = t_end_sec - t_start_sec
+            n_cuts = max(1, round(span / step_dur))
+            actual_dur = round(span / n_cuts, 3)
 
-for s in plan:
-    shot_n += 1
-    tk = take_next()
-    zoom = 1.06 if s["role"] == "drop" else 1.0
-    tr = PACING[s["role"]]["tr"]
-    tr_type = PACING[s["role"]]["tr_type"]
-    if shot_n == 1:
-        tr = 0.0
-    all_shots.append({
-        "shot": shot_n,
-        "t": round(s["t"], 6),
-        "zone": s["role"],
-        "role": s["role"],
-        "clip": tk["clip"],
-        "win": tk["win"],
-        "in": tk["in"],
-        "out": tk["out"],
-        "src_path": tk["path"],
-        "transition": round(tr, 6),
-        "tr_type": tr_type,
-        "zoom": zoom,
-    })
+            for c in range(n_cuts):
+                t0 = round(t_cursor, 3)
+                t1 = round(t_start_sec + (c + 1) * actual_dur if c < n_cuts - 1 else t_end_sec, 3)
+                shots.append({
+                    "shot": shot_idx,
+                    "section": sec["name"],
+                    "role": role,
+                    "t_start": t0,
+                    "t_end": t1,
+                    "duration": round(t1 - t0, 3),
+                    "transition": pacing["transition"],
+                    "tr_type": pacing["tr_type"],
+                    "zoom": 1.06 if role == "drop" else 1.0,
+                    "prompt": "",
+                    "lyric": ""
+                })
+                t_cursor = t1
+                shot_idx += 1
 
-final_shots = sorted(intro_shots + all_shots + outro_shots, key=lambda s: s["t"])
-for i, s in enumerate(final_shots):
-    s["shot"] = i + 1
+    # Bookends verification
+    shots[0]["transition"] = 1.5
+    shots[0]["tr_type"] = "fade_in"
+    shots[-1]["transition"] = 1.5
+    shots[-1]["tr_type"] = "fade_to_white"
 
-json.dump({
-    "meta": {
-        "title": doc["meta"]["title"],
-        "song_duration": round(DUR, 6),
-        "n_shots": len(final_shots),
-        "bpm": BPM,
-        "beat_period": round(BEAT_PERIOD, 6),
-        "markers": {k: len(grid_marks(k)) for k in
-                    ["4_beat", "8_beat", "16_beat", "32_beat", "64_beat"]},
-    },
-    "grid": {
-        "downbeat4": [round(x, 3) for x in DOWN4],
-        "downbeat8": [round(x, 3) for x in DOWN8],
-        "downbeat16": [round(x, 3) for x in DOWN16],
-        "downbeat32": [round(x, 3) for x in DOWN32],
-        "downbeat64": [round(x, 3) for x in DOWN64],
-    },
-    "sections": [{
-        "zone": sec["zone"],
-        "t_start": round(sec["t_start"], 6),
-        "t_end": round(sec["t_end"], 6),
-        "zone_role": ZONE_ROLE.get(sec["zone"], "low"),
-    } for sec in doc["sections"]],
-    "shots": final_shots,
-}, open(OUT, "w"), indent=2)
+    total_time = sum(s["duration"] for s in shots)
+    print(f"[blueprint] Generated {len(shots)} variable-duration shots")
+    print(f"  Total planned timeline duration: {total_time:.3f}s (must be 180.000s)")
 
-roles = {}
-for s in final_shots:
-    roles[s["role"]] = roles.get(s["role"], 0) + 1
-print(f"[orchestrate] {len(final_shots)} shots → {OUT}")
-print(f"  roles: " + ", ".join(f"{k}={v}" for k, v in sorted(roles.items())))
+    blueprint_path = song_dir / "blueprint.json"
+    with open(blueprint_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "title": doc["meta"]["title"],
+            "duration": dur,
+            "bpm": bpm,
+            "beat_period": beat_period,
+            "chloe_anchor": CHLOE_ANCHOR,
+            "rabbit_anchor": RABBIT_ANCHOR,
+            "style_anchor": STYLE_ANCHOR,
+            "total_shots": len(shots),
+            "shots": shots
+        }, f, indent=2)
+
+    print(f"[blueprint] [OK] Saved blueprint to {blueprint_path}")
+    return blueprint_path
+
+if __name__ == "__main__":
+    path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r"X:\chloeos-maestro\songs\silicon_heartbeat")
+    create_blueprint(path)
